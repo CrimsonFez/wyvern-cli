@@ -9,6 +9,8 @@ server_app = typer.Typer()
 app.add_typer(server_app, name="server")
 backup_app = typer.Typer()
 app.add_typer(backup_app, name="backup")
+files_app = typer.Typer()
+app.add_typer(files_app, name="file")
 
 configDir = os.path.expanduser('~') + '/.config/wyvern-cli/'
 configFilePath = configDir + 'config.json'
@@ -233,3 +235,31 @@ def delete(name: str, uuid: str):
             print(response.status_code)
     else:
         print("Deletion Aborted")
+
+@files_app.command()
+def list(name: str, directory: str = typer.Argument('')):
+    identifier = search(name)
+    dir = directory.replace('/', '%2F')
+    data = panelGET('client', f'/servers/{identifier}/files/list?directory={dir}').json()
+    for item in data['data']:
+        fileName = item['attributes']['name']
+        isFile = item['attributes']['is_file']
+        if not isFile:
+            typer.secho(f'/{fileName}', fg=typer.colors.BLUE)
+        else:
+            typer.echo(fileName)
+
+@files_app.command()
+def cat(name: str, file: str):
+    identifier = search(name)
+    path = file.replace('/', '%2F')
+    data = panelGET('client', f'/servers/{identifier}/files/contents?file={path}').text
+    print(data)
+
+@files_app.command()
+def download(name: str, file: str):
+    identifier = search(name)
+    path = file.replace('/', '%2F')
+    data = panelGET('client', f'/servers/{identifier}/files/download?file={path}').json()
+    link = data['attributes']['url']
+    typer.echo(link)
