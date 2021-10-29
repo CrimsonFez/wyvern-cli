@@ -22,8 +22,6 @@ application_key = keyData['application_key']
 base_url = keyData['base_url']
 if keyData['account_type'] == 'admin':
     admin = True
-if admin:
-    print('admin powers activated')
 headers = {
     'Accept': 'application/json',
     'Content-Type': 'application/json'
@@ -40,22 +38,38 @@ def panelGET(type: str, path: str):
     headers['Authorization'] = f'Bearer {api_key}'
     return requests.get(f'{base_url}{apiPath}{path}', headers=headers)
 
-@app.command()
-def get_default_key():
-    print(json.dumps(keyData, indent=1))
+def panelPOST(type: str, path: str, payload):
+    if type == 'client':
+        api_key = client_key
+        apiPath = 'api/client'
+    elif type == 'applic':
+        api_key = application_key
+        apiPath = 'api/application'
+    headers['Authorization'] = f'Bearer {api_key}'
+    return requests.post(f'{base_url}{apiPath}{path}', headers=headers, payload=payload)
 
 @app.command()
 def key_test():
-    if key_type == 'admin':
-        path = 'api/application'
-    elif key_type == 'client':
-        path = 'api/client'
-    data = requests.request('GET', f'{base_url}{path}', headers=headers).status_code
-    if data == 200:
+    dataClient = panelGET('client', '')
+    typer.secho('Testing Client API Key', bold=True)
+    if dataClient.status_code == 200:
         typer.secho('Success', fg=typer.colors.GREEN)
     else:
         typer.secho('Error', bg=typer.colors.RED)
         typer.echo(data)
+    if admin:
+        dataApplic = panelGET('applic', '/servers')
+        typer.secho('Testing Application API Key', bold=True)
+        if dataApplic.status_code == 200:
+            typer.secho('Success', fg=typer.colors.GREEN)
+        else:
+            typer.secho('Error', bg=typer.colors.RED)
+            typer.echo(data)
+
+@app.command()
+def api_test(type: str, path: str = typer.Argument('')):
+    data = panelGET(type, path)
+    typer.echo(json.dumps(data.json(), indent=1))
 
 @server_app.command()
 def list():
@@ -73,11 +87,3 @@ def list():
         print(ident, "#",  name, ':', ps)
         x += 1
     typer.echo(f'Showing {x} servers')
-    
-def power_status():
-    return response['attributes']['current_state']
-
-@app.command()
-def api_test(path: str):
-    data = panelGET(path)
-    typer.echo(json.dumps(data.json(), indent=1))
