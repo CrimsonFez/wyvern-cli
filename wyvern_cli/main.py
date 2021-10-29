@@ -73,7 +73,7 @@ def list():
         print(ident, "#",  name, ':', ps)
         x += 1
     typer.echo(f'Showing {x} servers')
-
+    
 def power_status():
     return response['attributes']['current_state']
 
