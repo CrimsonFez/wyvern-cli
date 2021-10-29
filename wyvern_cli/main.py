@@ -196,15 +196,6 @@ def kill(name: str):
     data = power_action(identifier, 'kill')
     typer.echo(data)
 
-@server_app.command()
-def console():
-    identifier = 'fce8d9d1'
-    data1 = panelGET('client', f'/servers/{identifier}/websocket').json()
-    token = data1['data']['token']
-    socket = data1['data']['socket']
-    typer.echo(token)
-    typer.echo(socket)
-
 @backup_app.command()
 def info(name: str, uuid: str = typer.Argument('None', help="if given, will show details for specified backup")):
     identifier = search(name)
