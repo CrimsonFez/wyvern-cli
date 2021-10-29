@@ -69,7 +69,7 @@ def setup(reset: bool = typer.Option(False, help="overwrites config")):
                 }
             }
             configData = json.dumps(configDataDict, indent=1)
-            #open(configFilePath, 'x+').write(configData)
+            open(configFilePath, 'x+').write(configData)
             #os.chmod(configFilePath, 0o600)
             typer.echo('Configuration Complete')
         else:
