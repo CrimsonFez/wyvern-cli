@@ -7,6 +7,8 @@ import requests
 app = typer.Typer()
 server_app = typer.Typer()
 app.add_typer(server_app, name="server")
+backup_app = typer.Typer()
+app.add_typer(backup_app, name="backup")
 
 configDir = os.path.expanduser('~') + '/.config/wyvern-cli/'
 configFilePath = configDir + 'config.json'
@@ -41,7 +43,7 @@ def panelGET(type: str, path: str):
     headers['Authorization'] = f'Bearer {api_key}'
     return requests.get(f'{base_url}{apiPath}{path}', headers=headers)
 
-def panelPOST(type: str, path: str, payload):
+def panelPOST(type: str, path: str, data):
     if type == 'client':
         api_key = client_key
         apiPath = 'api/client'
@@ -49,7 +51,17 @@ def panelPOST(type: str, path: str, payload):
         api_key = application_key
         apiPath = 'api/application'
     headers['Authorization'] = f'Bearer {api_key}'
-    return requests.post(f'{base_url}{apiPath}{path}', headers=headers, payload=payload)
+    return requests.post(f'{base_url}{apiPath}{path}', headers=headers, data=data)
+
+def panelDELETE(type: str, path: str):
+    if type == 'client':
+        api_key = client_key
+        apiPath = 'api/client'
+    elif type == 'applic':
+        api_key = application_key
+        apiPath = 'api/application'
+    headers['Authorization'] = f'Bearer {api_key}'
+    return requests.delete(f'{base_url}{apiPath}{path}', headers=headers)
 
 @app.command()
 def config():
@@ -84,7 +96,7 @@ def api_test(type: str, path: str = typer.Argument('')):
     typer.echo(json.dumps(data.json(), indent=1))
 
 @server_app.command()
-def list():
+def list(status: bool = typer.Option(False)):
     if admin:
         data1 = panelGET('applic', '/servers')
     else:
@@ -94,9 +106,12 @@ def list():
     for item in data1.json()['data']:
         ident = item['attributes']['identifier']
         name = item['attributes']['name']
-        data2 = panelGET('client', f'/servers/{ident}/resources').json()
-        ps = data2['attributes']['current_state']
-        print(ident, "#",  name, ':', ps)
+        if status:
+            data2 = panelGET('client', f'/servers/{ident}/resources').json()
+            ps = data2['attributes']['current_state']
+            typer.echo(f"{ident} # {name}:{ps}")
+        else:
+            typer.echo(f"{ident} # {name}")
         x += 1
     typer.echo(f'Showing {x} servers')
 
@@ -133,3 +148,97 @@ def search(name: str, print: bool = typer.Option(False, help="Display output. Ot
             if print == True:
                 typer.echo(item['attributes']['identifier'])
             return item['attributes']['identifier']
+
+def power_status(identifier: str):
+    data = panelGET('client', f'/servers/{identifier}/resources').json()
+    return data['attributes']['current_state']
+
+def power_action(identifier: str, action: str):
+    if action == 'start':
+        actionData = '{"signal": "start"}'
+    elif action == 'stop':
+        actionData = '{"signal": "stop"}'
+    elif action == 'restart':
+        actionData = '{"signal": "restart"}'
+    elif action == 'kill':
+        actionData = '{"signal": "stop"}'
+    else:
+        return 'error invalid action'
+    data = panelPOST('client', f'/servers/{identifier}/power', actionData).status_code
+    if data == 204:
+        return f'{action}ing server'
+    elif data == 404:
+        return 'server not found, check your spelling and capitalization'
+    else:
+        return f'error {data}'
+
+@server_app.command()
+def start(name: str):
+    identifier = search(name)
+    data = power_action(identifier, 'start')
+    typer.echo(data)
+
+@server_app.command()
+def stop(name: str):
+    identifier = search(name)
+    data = power_action(identifier, 'stop')
+    typer.echo(data)
+
+@server_app.command()
+def restart(name: str):
+    identifier = search(name)
+    data = power_action(identifier, 'restart')
+    typer.echo(data)
+
+@server_app.command()
+def kill(name: str):
+    identifier = search(name)
+    data = power_action(identifier, 'kill')
+    typer.echo(data)
+
+@server_app.command()
+def console():
+    identifier = 'fce8d9d1'
+    data1 = panelGET('client', f'/servers/{identifier}/websocket').json()
+    token = data1['data']['token']
+    socket = data1['data']['socket']
+    typer.echo(token)
+    typer.echo(socket)
+
+@backup_app.command()
+def info(name: str, uuid: str = typer.Argument('None', help="if given, will show details for specified backup")):
+    identifier = search(name)
+    if uuid == 'None':
+        response = panelGET('client', f'/servers/{identifier}/backups')
+        typer.secho(f'### Listing Backups for {name} ###', bold=True)
+        for item in response.json()['data']:
+            bName = item['attributes']['name']
+            bUuid = item['attributes']['uuid']
+            typer.echo(f"{bUuid} # {bName}")
+    else:
+        response = panelGET('client', f'/servers/{identifier}/backups/{uuid}').json()
+        typer.echo(json.dumps(response, indent=1))
+
+@backup_app.command()
+def create(name: str):
+    identifier = search(name)
+    response = panelPOST('client', f'/servers/{identifier}/backups', 0).status_code
+    if response == 200:
+        typer.echo(f'Success {response}')
+    else:
+        typer.echo(f'Error {response}')
+
+@backup_app.command()
+def delete(name: str, uuid: str):
+    identifier = search(name)
+    bName = panelGET('client', f'/servers/{identifier}/backups/{uuid}').json()['attributes']['name']
+    protect = typer.confirm(f"Are you sure you want to delete {bName}")
+    if protect:
+        response = panelDELETE('client', f'/servers/{identifier}/backups/{uuid}')
+        if response.status_code == 204:
+            print('Success')
+        else:
+            print('Error')
+            print(response.status_code)
+    else:
+        print("Deletion Aborted")
